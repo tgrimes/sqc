@@ -21,11 +21,14 @@ knitr::opts_chunk$set(
 )
 ```
 
-The `sqc` package accompanies a course in Statistical Quality Control. It has three parts:
+The `sqc` package accompanies a course in Statistical Quality Control. It has six parts:
 
 1. **Constants** for control chart limits: `d2()`, `d3()`, `c4()`, and the table `qc_constants()`.
 2. **Charts**: `qc_chart()` computes an $\bar{X}$ or $R$ chart, and `autoplot()` draws it with ggplot2.
-3. **Example data**: `filler` and `filler_rotating`, the four-head bottle filler used in Week 1.
+3. **Levey-Jennings charts and the Westgard rules** for laboratory control results: `lj_chart()` and `apply_rules()`.
+4. **Run-length simulation** for the average run length of control rules: `sim_run_length()`, `arl()`, and `arl_table()`.
+5. **Acceptance sampling**: `sampling_plan()`, `oc_curve()`, `plan_risks()`, `find_plan()`, `aoq()`, `ati()`, `aoql()`, and `sim_acceptance()`.
+6. **Example data**: `filler` and `filler_rotating`, the four-head bottle filler used in Week 1.
 
 ```{r}
 library(sqc)
@@ -181,6 +184,102 @@ Patterns within the limits are not checked by default. To also flag a **run** of
 qc_chart(phase2, type = "xbar", center = p1$center, sigma = p1$sigma, run_length = 4)$signals
 ```
 
+## Levey-Jennings charts and the Westgard rules
+
+Clinical laboratories monitor a control material with a **Levey-Jennings chart**: an individuals chart in which the mean and standard deviation of the material are *known* from earlier data, with lines at the mean and at 1, 2, and 3 SD. A run (one measurement of each control level) is *rejected* when a **Westgard rule** fires. In general SPC the same ideas are called an individuals chart with sigma zones and the Western Electric and Nelson run rules.
+
+`lj_chart()` takes a matrix with one row per run and one column per control level, together with the established mean and SD of each level:
+
+```{r}
+set.seed(42)
+controls <- cbind(rnorm(30, mean = 100, sd = 3), rnorm(30, mean = 250, sd = 6))
+controls[19:30, ] <- controls[19:30, ] + rep(c(4.5, 9), each = 12)   # a 1.5 SD shift from run 19
+
+lj <- lj_chart(controls, mean = c(100, 250), sd = c(3, 6), level_labels = c("Low control", "High control"))
+lj
+autoplot(lj, subtitle = "Rules: 1-3s, 2-2s, R-4s, 4-1s, 10x; a 1.5 SD shift begins at run 19")
+```
+
+The default rules are the multirule (`"1-3s"`, `"2-2s"`, `"R-4s"`, `"4-1s"`, `"10x"`). `"1-2s"`, which is only a warning rule in Westgard's scheme, can be requested as a rejection rule through the `rules` argument. `apply_rules()` works on z-scores directly and returns one row per violation:
+
+```{r}
+lj$violations
+apply_rules(lj$z, rules = "1-2s")$run
+```
+
+## Average run length by simulation
+
+The **run length** is the number of runs until the first rejection, and the **average run length** (ARL) is its mean. For a rule that looks at a single independent point, such as 1-3s, the run length is geometric and $\text{ARL} = 1/p$. Pattern rules and combinations of rules have overlapping checks, so their ARL is found by simulation. `sim_run_length()` simulates the controls run by run, and `arl_table()` summarizes several rules and shifts:
+
+```{r}
+set.seed(1)
+arl_table(list("1-3s", "1-2s", Multirule = "multirule"), shifts = c(0, 1, 2), reps = 1000) |>
+  subset(select = c(rule, shift, arl)) |>
+  knitr::kable(digits = 1)
+```
+
+A shift is measured in SD units. A single simulation returns every run length, which shows how skewed the distribution is:
+
+```{r}
+set.seed(2)
+rl <- sim_run_length("1-3s", reps = 2000)
+rl
+hist(rl, breaks = 40, main = "Run length of the 1-3s rule, two controls per run",
+     xlab = "Runs until rejection")
+```
+
+With `dist = "lognormal"` the controls are skewed (but still standardized to mean 0 and SD 1), which shows that an ARL derived under normality does not hold for skewed data:
+
+```{r}
+set.seed(3)
+sim_run_length("1-3s", levels = 1, dist = "lognormal", sdlog = 0.5, reps = 2000)
+```
+
+## Acceptance sampling: sampling plans and OC curves
+
+A **single sampling plan** inspects $n$ items from a lot and accepts the lot if at most $c$ are defective. Its **operating characteristic (OC) curve** is the probability of accepting a lot as a function of the lot's true fraction defective $p$. With a lot size `N` the number of defectives in the sample is hypergeometric; without it the binomial approximation is used.
+
+```{r}
+plan <- sampling_plan(n = 50, c = 1, N = 5000)
+plan
+oc_curve(plan, p = c(0.01, 0.05, 0.10))
+```
+
+`plan_risks()` gives the producer's risk (rejecting a lot at the acceptable quality level, AQL) and the consumer's risk (accepting a lot at the lot tolerance percent defective, LTPD), and `autoplot()` draws the curve with both points marked:
+
+```{r}
+plan_risks(plan, aql = 0.01, ltpd = 0.05)
+autoplot(oc_curve(plan), aql = 0.01, ltpd = 0.05,
+         subtitle = "Inspect 50 of 5000, accept if at most 1 defective")
+```
+
+`find_plan()` searches for the smallest plan that meets both risks, and several plans can be compared on one chart:
+
+```{r}
+find_plan(aql = 0.01, alpha = 0.05, ltpd = 0.05, beta = 0.10)
+plans <- list("n = 50, c = 1" = sampling_plan(50, 1), "n = 132, c = 3" = sampling_plan(132, 3))
+autoplot(oc_curve(plans), aql = 0.01, ltpd = 0.05, subtitle = "The second plan meets both risks")
+```
+
+With **rectifying inspection** (rejected lots are inspected completely and defectives replaced), `aoq()`, `ati()`, and `aoql()` give the average outgoing quality, the average total inspection, and the AOQ limit. `sim_acceptance()` estimates the OC curve by simulating lots:
+
+```{r}
+aoql(plan)
+set.seed(1)
+sim_acceptance(plan, p = c(0.01, 0.05), reps = 5000)
+```
+
+## Run lengths when the limits are estimated
+
+Limits are usually estimated from a baseline, and the process has its true mean $\mu$ and SD $\sigma$ rather than the estimates $\hat\mu$ and $\hat\sigma$. The standardized results $(X - \hat\mu)/\hat\sigma$ have a **shift** $(\mu - \hat\mu)/\hat\sigma$ and a **scale** $\sigma/\hat\sigma$, which `sim_run_length()` accepts as `shift` and `scale`. For example, a baseline that estimated the SD at 80% of its true value and the mean 0.4 SD too high gives a 1-3s rule that rejects far too often:
+
+```{r}
+mu_hat <- 0.4; sigma_hat <- 0.8                 # true mean 0 and SD 1
+set.seed(2)
+sim_run_length("1-3s", levels = 1, shift = -mu_hat / sigma_hat, scale = 1 / sigma_hat, reps = 2000)
+1 / (1 - pnorm(mu_hat + 3 * sigma_hat) + pnorm(mu_hat - 3 * sigma_hat))     # exact ARL
+```
+
 ## Customizing the plot
 
 `autoplot()` returns an ordinary ggplot object, so add layers and themes with `+`:
@@ -204,3 +303,9 @@ autoplot(rational, subtitle = "Rational subgroup plan") +
 | Estimated $\sigma$, center, limits | `q$sigma`, `q$center`, `q$limits` |
 | Plotted statistics and signals | `q$statistics`, `q$signals` |
 | Constants | `d2(n)`, `d3(n)`, `c4(n)`, `qc_constants(n)` |
+| Levey-Jennings chart with the Westgard rules | `lj_chart(x, mean, sd)`, then `autoplot()` |
+| Rule violations in z-scores | `apply_rules(z, rules = "multirule")` |
+| Simulate run lengths; ARL | `sim_run_length(rules, shift, levels)`; `arl(x)`; `arl_table(rules, shifts)` |
+| Sampling plan, OC curve | `sampling_plan(n, c, N)`; `oc_curve(plan)`; `autoplot(oc, aql, ltpd)` |
+| Producer's and consumer's risk; smallest plan | `plan_risks(plan, aql, ltpd)`; `find_plan(aql, alpha, ltpd, beta)` |
+| Rectifying inspection | `aoq(plan, p)`; `ati(plan, p)`; `aoql(plan)` |

@@ -1,3 +1,26 @@
+# sqc 0.4.0
+
+## Run lengths with estimated limits
+
+* `sim_run_length()` and `arl_table()` have a new argument `scale`, the standard deviation of the standardized results (default 1). Together with `shift` it describes a chart whose limits were estimated: with true mean and SD mu and sigma and estimated limits mu-hat and sigma-hat, use `shift = (mu - mu-hat) / sigma-hat` and `scale = sigma / sigma-hat`. The help page gives the formulas and an example.
+
+# sqc 0.3.0
+
+## Acceptance sampling
+
+* `sampling_plan()` creates a single sampling plan `(n, c)`, optionally with a lot size `N` (hypergeometric; the binomial approximation otherwise). `oc_curve()` computes the OC curve of one plan or a list of plans, `autoplot()` draws it and can mark the AQL and LTPD, and `plan_risks()` returns the producer's and consumer's risks.
+* `find_plan()` finds the smallest plan that meets a producer's and a consumer's risk.
+* `aoq()`, `ati()`, and `aoql()` give the average outgoing quality, the average total inspection, and the AOQ limit under rectifying inspection.
+* `sim_acceptance()` estimates the OC curve by simulating the inspection of lots.
+
+# sqc 0.2.0
+
+## Rules, Levey-Jennings charts, and run lengths
+
+* `lj_chart()` computes a Levey-Jennings chart for the control results of one or more levels, given the established mean and SD of each control material, and applies the Westgard rules. `autoplot()` draws one panel per level with lines at the mean and at 1, 2, and 3 SD, and shades rejected runs. `print()` and `as.data.frame()` methods are provided.
+* `apply_rules()` applies the rules `"1-2s"`, `"1-3s"`, `"2-2s"`, `"R-4s"`, `"4-1s"`, and `"10x"` (or `"multirule"`, the five rejection rules) to a matrix of z-scores with one row per run and one column per control level, and returns the violations. The 4-1s and 10x rules count consecutive runs on each level separately. The help page lists the null probability of each rule.
+* `sim_run_length()` simulates the number of runs until a rejection for one or more rules, any shift, any number of levels, and normal or lognormal controls. `arl()` returns the average run length, and `arl_table()` tabulates the ARL of several rules at several shifts. The simulator reproduces the exact ARLs for 1-3s, 1-2s, 2-2s, 4-1s, and 10x.
+
 # sqc 0.1.0
 
 First release.
