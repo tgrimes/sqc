@@ -1,0 +1,205 @@
+---
+title: "Getting started with sqc"
+author: "Tyler Grimes"
+output:
+  rmarkdown::html_vignette:
+    math_method: mathml
+vignette: >
+  %\VignetteIndexEntry{Getting started with sqc}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6.5,
+  fig.height = 3.6,
+  fig.align = "center",
+  dpi = 110
+)
+```
+
+The `sqc` package accompanies a course in Statistical Quality Control. It has three parts:
+
+1. **Constants** for control chart limits: `d2()`, `d3()`, `c4()`, and the table `qc_constants()`.
+2. **Charts**: `qc_chart()` computes an $\bar{X}$ or $R$ chart, and `autoplot()` draws it with ggplot2.
+3. **Example data**: `filler` and `filler_rotating`, the four-head bottle filler used in Week 1.
+
+```{r}
+library(sqc)
+```
+
+## Control chart constants
+
+Let $W = R/\sigma$ be the range of $n$ independent standard normal values. For subgroups of size $n$ from a normal process,
+$$E(R) = d_2\sigma, \qquad SD(R) = d_3\sigma, \qquad E(s) = c_4\sigma.$$
+The constants are computed exactly, so any subgroup size $n \ge 2$ is allowed.
+
+```{r}
+d2(4)
+d3(4)
+c4(5)
+```
+
+`qc_constants()` returns the whole table used for control limits: $A_2 = 3/(d_2\sqrt{n})$ for the $\bar{X}$ chart, $D_3$ and $D_4$ for the $R$ chart, and $A_3$, $B_3$, $B_4$ for charts based on the sample standard deviation.
+
+```{r}
+knitr::kable(qc_constants(2:8), digits = 3)
+```
+
+Because $d_2$ is the mean of $W$, you can check it by simulation:
+
+```{r}
+set.seed(1)
+mean(replicate(100000, diff(range(rnorm(4)))))   # simulated d2 for n = 4
+d2(4)                                            # exact
+```
+
+## The example data
+
+A four-head filler fills one bottle per head in each cycle. The target is 500 mL and the bottle-to-bottle standard deviation within a head is 1 mL, but head 3 runs 3 mL high. This is an assignable cause.
+
+`filler` follows the **mixed-head plan**: in every sampled cycle, one bottle from each head forms a sample of size 4. `cycle` is the sample number.
+
+```{r}
+head(filler, 8)
+```
+
+`filler_rotating` follows the **rational subgroup plan**: 5 consecutive cycles from head 1, then 5 from head 2, head 3, head 4, then head 1 again. Each block of 5 bottles from one head is a subgroup.
+
+```{r}
+head(filler_rotating, 8)
+```
+
+## Computing and drawing a chart
+
+`qc_chart()` takes subgroup data and a chart `type`, either `"xbar"` or `"R"`. With a data frame, name the measurement column (`value`) and the column that identifies the subgroup (`sample`), as in dplyr. Subgroups are plotted in the order they first appear.
+
+```{r}
+q <- qc_chart(filler, type = "xbar", value = fill_ml, sample = cycle)
+q
+```
+
+The object stores what you need to build tables and your own figures:
+
+```{r}
+q$center       # center line
+q$limits       # lower and upper control limits
+q$sigma        # estimated within-subgroup standard deviation, R-bar / d2
+head(q$statistics)   # the plotted subgroup means
+```
+
+To draw the chart, call `autoplot()`. The default title names the chart; add a title, subtitle, and axis label to say what the data are.
+
+```{r}
+autoplot(q,
+         subtitle = "Mixed-head plan: one bottle from each head in every sample",
+         ylab = "Sample mean (mL)")
+```
+
+The $R$ chart works the same way. Its lower limit is $\max(0, \bar R - 3d_3\hat\sigma)$, which is 0 for subgroups of size 6 or fewer.
+
+```{r}
+qc_chart(filler, type = "R", value = fill_ml, sample = cycle) |>
+  autoplot(subtitle = "Mixed-head plan", ylab = "Sample range (mL)")
+```
+
+You can also supply a matrix with one row per subgroup and one column per observation. This is convenient for small examples worked by hand:
+
+```{r}
+x <- matrix(c(10.1, 9.8, 10.0, 10.3,
+              10.2, 10.0, 9.9, 10.1,
+              9.7, 10.4, 10.0, 9.9),
+            nrow = 3, byrow = TRUE)
+qc_chart(x, type = "xbar")
+```
+
+## Rational subgroups change the limits
+
+The two plans measure the same process. The mixed-head plan puts the head differences **inside** every sample, which inflates the within-sample ranges and widens the limits. The rational subgroup plan keeps each subgroup within one head.
+
+```{r}
+mixed <- qc_chart(subset(filler, cycle <= 20), type = "xbar", value = fill_ml, sample = cycle)
+rational <- qc_chart(filler_rotating, type = "xbar", value = fill_ml,
+                     sample = (cycle - 1) %/% 5 + 1)
+
+data.frame(
+  plan = c("Mixed-head", "Rational subgroup"),
+  subgroup_size = c(mixed$n, rational$n),
+  sigma_hat = c(mixed$sigma, rational$sigma),
+  LCL = c(mixed$limits[["lcl"]], rational$limits[["lcl"]]),
+  UCL = c(mixed$limits[["ucl"]], rational$limits[["ucl"]]),
+  signals = c(length(mixed$signals$beyond), length(rational$signals$beyond))
+) |>
+  knitr::kable(digits = 2)
+```
+
+The true within-head standard deviation is 1 mL. The mixed-head estimate is nearly twice that, so the limits are too wide and the chart never signals. With rational subgroups, $\hat\sigma$ is close to 1 and the chart signals when head 3 is sampled:
+
+```{r}
+autoplot(rational,
+         title = expression(bar(X) * " chart: rational subgroup plan"),
+         subtitle = "Subgroups of 5 consecutive bottles from one head",
+         ylab = "Subgroup mean (mL)")
+```
+
+## Phase I and Phase II
+
+In Phase I the center line and limits are estimated from the data. In Phase II new subgroups are monitored against those limits, which are no longer re-estimated. Give `qc_chart()` the Phase I `center` and `sigma` to build a Phase II chart.
+
+```{r}
+set.seed(7)
+phase1 <- matrix(rnorm(25 * 5, mean = 50, sd = 2), ncol = 5)   # in-control data
+p1 <- qc_chart(phase1, type = "xbar")
+
+shift <- rep(c(0, 3), c(10, 5))                                # mean shifts up by 3 at sample 11
+phase2 <- matrix(rnorm(15 * 5, mean = 50 + shift, sd = 2), ncol = 5)
+p2 <- qc_chart(phase2, type = "xbar", center = p1$center, sigma = p1$sigma)
+
+autoplot(p2,
+         subtitle = "Phase II: limits from Phase I; the mean shifts at sample 11",
+         ylab = "Sample mean")
+```
+
+For an $R$ chart, supplying `sigma` sets the center line to $d_2\sigma$.
+
+## Signals
+
+`qc_chart()` flags two signals:
+
+- a point **beyond the control limits**, and
+- a **run** of 7 or more consecutive points on one side of the center line (the points from the 7th onward are flagged). Change the run length with `run_length`.
+
+The indices of the flagged points are in `$signals`, and `as.data.frame()` gives one row per subgroup:
+
+```{r}
+p2$signals
+as.data.frame(p2) |>
+  subset(status != "No signal")
+```
+
+## Customizing the plot
+
+`autoplot()` returns an ordinary ggplot object, so add layers and themes with `+`:
+
+```{r}
+library(ggplot2)
+
+autoplot(rational, subtitle = "Rational subgroup plan") +
+  labs(caption = "Head 3 runs 3 mL high") +
+  theme(panel.grid.minor = element_blank())
+```
+
+## Function reference
+
+| Task | Code |
+|:--|:--|
+| $\bar{X}$ chart from a matrix | `qc_chart(m, type = "xbar")` |
+| $R$ chart from a data frame | `qc_chart(df, "R", value = x, sample = s)` |
+| Draw a chart | `autoplot(q, title = "...", subtitle = "...")` |
+| Fix the center line or $\sigma$ | `qc_chart(m, "xbar", center = 500, sigma = 1)` |
+| Estimated $\sigma$, center, limits | `q$sigma`, `q$center`, `q$limits` |
+| Plotted statistics and signals | `q$statistics`, `q$signals` |
+| Constants | `d2(n)`, `d3(n)`, `c4(n)`, `qc_constants(n)` |

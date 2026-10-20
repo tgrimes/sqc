@@ -1,0 +1,26 @@
+Package: sqc
+Title: Companion Tools for a Statistical Quality Control Course
+Version: 0.1.0
+Authors@R: person("Tyler", "Grimes", email = "tyler.grimes.unf@gmail.com", role = c("aut", "cre"))
+Description: Control chart constants (d2, d3, c4, A2, D3, D4, and others),
+    Shewhart X-bar and R charts drawn with ggplot2, and the example datasets
+    used in the lecture slides and notes.
+License: MIT + file LICENSE
+URL: https://github.com/tgrimes/sqc
+BugReports: https://github.com/tgrimes/sqc/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1.0)
+Imports:
+    ggplot2,
+    rlang,
+    tibble
+Suggests:
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+LazyData: true
+Config/roxygen2/version: 8.1.0

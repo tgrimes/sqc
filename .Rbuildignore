@@ -1,0 +1,6 @@
+^data-raw$
+^README\.md$
+^\.Rproj\.user$
+^\.gitignore$
+^\.DS_Store$
+^\.github$
