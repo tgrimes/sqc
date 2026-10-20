@@ -44,7 +44,7 @@ test_that("a data frame gives the same chart as the matrix", {
   expect_equal(qc_chart(filler, "xbar", fill_ml, cycle)$m, 40)
 })
 
-test_that("signals: points beyond the limits and one-sided runs", {
+test_that("signals: points beyond the limits, and one-sided runs only when asked for", {
   # six subgroups near the center, then one far above it
   near <- matrix(c(10, 10.5, 9.5, 10), nrow = 6, ncol = 4, byrow = TRUE)
   far <- c(30, 31, 30, 31)
@@ -61,6 +61,12 @@ test_that("signals: points beyond the limits and one-sided runs", {
   # a run shorter than run_length is not flagged
   q3 <- qc_chart(above[1:6, ], type = "xbar", center = 10, sigma = 1, run_length = 7)
   expect_length(q3$signals$run, 0)
+
+  # by default runs are not checked, however long the run is
+  q4 <- qc_chart(above, type = "xbar", center = 10, sigma = 1)
+  expect_length(q4$signals$run, 0)
+  expect_length(q4$signals$beyond, 0)
+  expect_identical(q4$run_length, Inf)
 })
 
 test_that("bad input gives clear errors", {
@@ -71,6 +77,23 @@ test_that("bad input gives clear errors", {
   ragged <- data.frame(s = c(1, 1, 1, 2, 2), v = 1:5)
   expect_error(qc_chart(ragged, "xbar", v, s), "same size")
   expect_error(qc_chart(x, sigma = -1), "positive")
+})
+
+test_that("print mentions runs only when run_length is set", {
+  expect_output(print(qc_chart(x, type = "xbar")), "beyond the limits")
+  out_default <- capture.output(print(qc_chart(x, type = "xbar")))
+  expect_false(any(grepl("runs of", out_default)))
+  expect_output(print(qc_chart(x, type = "xbar", run_length = 7)), "in runs of 7\\+")
+})
+
+test_that("autoplot colors runs only when run_length is set", {
+  above <- matrix(10.3, nrow = 9, ncol = 4)
+  p_off <- ggplot2::autoplot(qc_chart(above, "xbar", center = 10, sigma = 1))
+  p_on <- ggplot2::autoplot(qc_chart(above, "xbar", center = 10, sigma = 1, run_length = 7))
+  col_off <- ggplot2::ggplot_build(p_off)$data[[4]]$colour
+  col_on <- ggplot2::ggplot_build(p_on)$data[[4]]$colour
+  expect_false("orange" %in% col_off)
+  expect_equal(sum(col_on == "orange"), 3)   # points 7, 8, 9
 })
 
 test_that("print and autoplot work", {
@@ -113,11 +136,12 @@ test_that("invalid k is an error", {
                2 * qc_chart(x, "xbar")$sigma / sqrt(4))
 })
 
-test_that("invalid run_length is an error, and Inf turns the run signal off", {
-  for (bad in list(0, 1, 2.5, NA_real_, -Inf, "a", c(7, 8), NULL)) {
+test_that("invalid run_length is an error, and NULL or Inf means no run signal", {
+  for (bad in list(0, 1, 2.5, NA_real_, -Inf, "a", c(7, 8))) {
     expect_error(qc_chart(x, "xbar", run_length = bad), "`run_length` must be a whole number")
   }
   above <- matrix(10.3, nrow = 9, ncol = 4)
+  expect_length(qc_chart(above, "xbar", center = 10, sigma = 1, run_length = NULL)$signals$run, 0)
   expect_length(qc_chart(above, "xbar", center = 10, sigma = 1, run_length = Inf)$signals$run, 0)
   expect_equal(qc_chart(above, "xbar", center = 10, sigma = 1, run_length = 2)$signals$run, 2:9)
 })

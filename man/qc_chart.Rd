@@ -12,7 +12,7 @@ qc_chart(
   center = NULL,
   sigma = NULL,
   k = 3,
-  run_length = 7
+  run_length = NULL
 )
 }
 \arguments{
@@ -34,13 +34,13 @@ how a Phase II chart is built from Phase I estimates.}
 number. Default 3.}
 
 \item{run_length}{Length of a one-sided run that counts as a signal: a whole number of at
-least 2, or \code{Inf} to turn the run signal off. Default 7.}
+least 2. The default, \code{NULL}, does not look for runs (\code{Inf} has the same effect).}
 }
 \value{
 An object of class \code{qc_chart}, a list with elements \code{type}, \code{statistics}, \code{center},
 \code{limits} (\code{lcl}, \code{ucl}), \code{sigma}, \code{n} (subgroup size), \code{m} (number of subgroups), \code{k},
-\code{run_length}, and \code{signals} (indices of points beyond the limits, \code{beyond}, and in a
-run, \code{run}).
+\code{run_length} (\code{Inf} when runs are not checked), and \code{signals} (indices of points beyond the
+limits, \code{beyond}, and in a run, \code{run}; the latter is empty unless \code{run_length} is set).
 }
 \description{
 Computes the plotted statistics, center line, control limits, and signals for an
@@ -57,15 +57,16 @@ With subgroup size \eqn{n}, the within-subgroup standard deviation is estimated 
 \eqn{\max(0, \bar R - k d_3\hat\sigma)}{max(0, Rbar - k d_3*sigma-hat)} and \eqn{\bar R + k d_3\hat\sigma}{Rbar + k d_3*sigma-hat}.
 }
 
-Two signals are flagged: a point beyond the limits, and a run of \code{run_length} or more
-consecutive points on one side of the center line (the points from the \code{run_length}th
-onward are flagged, since that is when the run is recognized).
+A point beyond the limits is always flagged as a signal. Patterns within the limits are not
+checked unless you ask for them: set \code{run_length} to flag a run of that many (or more)
+consecutive points on one side of the center line. The points from the \code{run_length}th onward
+are flagged, since that is when the run is recognized.
 }
 \section{Errors and warnings}{
 
 Invalid arguments give an error: \code{k} must be a positive number, \code{sigma} a positive finite
-number, \code{center} a finite number (positive for an \eqn{R} chart), and \code{run_length} a whole
-number of at least 2 (or \code{Inf}). Subgroups must all have the same size, at least 2, with no
+number, \code{center} a finite number (positive for an \eqn{R} chart), and \code{run_length} \code{NULL}, \code{Inf},
+or a whole number of at least 2. Subgroups must all have the same size, at least 2, with no
 missing values. A warning is given if the estimated \eqn{\sigma}{sigma} is 0 (every subgroup
 has range 0), because the limits then collapse onto the center line.
 }
@@ -79,6 +80,9 @@ q
 
 # A data frame with one row per bottle
 qc_chart(filler, type = "r", value = fill_ml, sample = cycle)
+
+# Also flag runs of 7 or more points on one side of the center line (off by default)
+qc_chart(x, type = "xbar", run_length = 7)
 
 # Phase II: monitor new data with limits fixed from Phase I
 phase1 <- qc_chart(x, type = "xbar")

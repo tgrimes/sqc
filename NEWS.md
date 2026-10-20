@@ -10,7 +10,7 @@ First release.
 ## Charts
 
 * `qc_chart()` computes an X-bar or R chart (center line, limits, and signals) from a matrix with one row per subgroup, or from a data frame with `value` and `sample` columns. Supplying `center` and `sigma` gives fixed limits for Phase II monitoring.
-* Signals are a point beyond the limits and a run of `run_length` (default 7) or more points on one side of the center line. The run signal can be turned off with `run_length = Inf`.
+* A point beyond the limits is flagged as a signal. Patterns within the limits are not checked by default; set `run_length` (a whole number of at least 2) to also flag runs of that many or more points on one side of the center line.
 * `qc_chart()` checks its arguments: `k`, `sigma`, `center`, and `run_length` must be valid numbers, subgroups must have equal size (at least 2) with no missing values, and a warning is given when the estimated sigma is 0.
 * `autoplot()` draws a `qc_chart` with ggplot2 and returns a ggplot object. `plot()`, `print()`, and `as.data.frame()` methods are also provided.
 

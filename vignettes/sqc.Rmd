@@ -167,17 +167,18 @@ For an $R$ chart, supplying `sigma` sets the center line to $d_2\sigma$.
 
 ## Signals
 
-`qc_chart()` flags two signals:
-
-- a point **beyond the control limits**, and
-- a **run** of 7 or more consecutive points on one side of the center line (the points from the 7th onward are flagged). Change the run length with `run_length`.
-
-The indices of the flagged points are in `$signals`, and `as.data.frame()` gives one row per subgroup:
+`qc_chart()` flags a point **beyond the control limits** as a signal. The indices of the flagged points are in `$signals`, and `as.data.frame()` gives one row per subgroup:
 
 ```{r}
-p2$signals
+p2$signals$beyond
 as.data.frame(p2) |>
   subset(status != "No signal")
+```
+
+Patterns within the limits are not checked by default. To also flag a **run** of consecutive points on one side of the center line, set `run_length` (here, 4 or more in a row) (the points from the `run_length`th onward are flagged, and `autoplot()` colors them orange):
+
+```{r}
+qc_chart(phase2, type = "xbar", center = p1$center, sigma = p1$sigma, run_length = 4)$signals
 ```
 
 ## Customizing the plot

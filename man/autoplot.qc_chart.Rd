@@ -31,8 +31,8 @@ A ggplot object, so it can be modified with the usual \code{+} syntax.
 }
 \description{
 Plots a \code{qc_chart} object: the plotted statistic in time order, the center line (solid),
-the control limits (dashed), and signals in color (red for a point beyond the limits,
-orange for a long one-sided run).
+the control limits (dashed), and signals in color (red for a point beyond the limits, and
+orange for a one-sided run when \code{run_length} was set in \code{\link[=qc_chart]{qc_chart()}}).
 }
 \examples{
 q <- qc_chart(filler, type = "xbar", value = fill_ml, sample = cycle)

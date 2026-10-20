@@ -1,8 +1,8 @@
 #' Draw a control chart with ggplot2
 #'
 #' Plots a `qc_chart` object: the plotted statistic in time order, the center line (solid),
-#' the control limits (dashed), and signals in color (red for a point beyond the limits,
-#' orange for a long one-sided run).
+#' the control limits (dashed), and signals in color (red for a point beyond the limits, and
+#' orange for a one-sided run when `run_length` was set in [qc_chart()]).
 #'
 #' @param object A [qc_chart()] object.
 #' @param title,subtitle Plot title and subtitle (character strings or plotmath expressions).
@@ -21,6 +21,7 @@ autoplot.qc_chart <- function(object, title = NULL, subtitle = NULL,
     title <- if (object$type == "xbar") expression(bar(X) * " chart") else "R chart"
   }
   if (is.null(ylab)) ylab <- if (object$type == "xbar") "Sample mean" else "Sample range"
+  has_runs <- is.finite(object$run_length)
   run_label <- paste0("Run of ", object$run_length, " on one side")
   d <- as.data.frame(object)
   d$status[d$status == "Run"] <- run_label
@@ -34,7 +35,7 @@ autoplot.qc_chart <- function(object, title = NULL, subtitle = NULL,
   by <- max(1, 5 * ceiling(m / 50))
   breaks <- unique(c(1, if (m >= by) seq(by, m, by = by)))
   colors <- c("No signal" = "black", "Beyond limits" = "red")
-  colors[run_label] <- "orange"
+  if (has_runs) colors[run_label] <- "orange"
 
   ggplot2::ggplot(d, ggplot2::aes(x = .data$sample, y = .data$statistic)) +
     ggplot2::geom_hline(yintercept = object$center) +
@@ -43,7 +44,7 @@ autoplot.qc_chart <- function(object, title = NULL, subtitle = NULL,
     ggplot2::geom_point(ggplot2::aes(color = .data$status), size = 2.2) +
     ggplot2::geom_text(data = edge, ggplot2::aes(x = m + 0.7, y = .data$y, label = .data$label),
                        hjust = 0, size = 3.6, inherit.aes = FALSE) +
-    ggplot2::scale_color_manual(values = colors, breaks = c("Beyond limits", run_label), name = NULL) +
+    ggplot2::scale_color_manual(values = colors, breaks = c("Beyond limits", if (has_runs) run_label), name = NULL) +
     ggplot2::scale_x_continuous(breaks = breaks) +
     ggplot2::coord_cartesian(xlim = c(0.5, m + 0.5), ylim = ylim, expand = FALSE, clip = "off") +
     ggplot2::labs(x = xlab, y = ylab, title = title, subtitle = subtitle) +

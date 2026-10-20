@@ -11,9 +11,10 @@
 #' * the \eqn{R} chart has center line \eqn{\bar R = d_2\hat\sigma}{Rbar = d_2*sigma-hat} and limits
 #'   \eqn{\max(0, \bar R - k d_3\hat\sigma)}{max(0, Rbar - k d_3*sigma-hat)} and \eqn{\bar R + k d_3\hat\sigma}{Rbar + k d_3*sigma-hat}.
 #'
-#' Two signals are flagged: a point beyond the limits, and a run of `run_length` or more
-#' consecutive points on one side of the center line (the points from the `run_length`th
-#' onward are flagged, since that is when the run is recognized).
+#' A point beyond the limits is always flagged as a signal. Patterns within the limits are not
+#' checked unless you ask for them: set `run_length` to flag a run of that many (or more)
+#' consecutive points on one side of the center line. The points from the `run_length`th onward
+#' are flagged, since that is when the run is recognized.
 #'
 #' @param data Subgroup data, either a matrix with one row per subgroup (sample) and one column
 #'   per observation, or a data frame with one row per observation (use `value` and `sample`).
@@ -28,18 +29,18 @@
 #' @param k Number of standard deviations from the center line to the limits: a positive
 #'   number. Default 3.
 #' @param run_length Length of a one-sided run that counts as a signal: a whole number of at
-#'   least 2, or `Inf` to turn the run signal off. Default 7.
+#'   least 2. The default, `NULL`, does not look for runs (`Inf` has the same effect).
 #' @section Errors and warnings:
 #' Invalid arguments give an error: `k` must be a positive number, `sigma` a positive finite
-#' number, `center` a finite number (positive for an \eqn{R} chart), and `run_length` a whole
-#' number of at least 2 (or `Inf`). Subgroups must all have the same size, at least 2, with no
+#' number, `center` a finite number (positive for an \eqn{R} chart), and `run_length` `NULL`, `Inf`,
+#' or a whole number of at least 2. Subgroups must all have the same size, at least 2, with no
 #' missing values. A warning is given if the estimated \eqn{\sigma}{sigma} is 0 (every subgroup
 #' has range 0), because the limits then collapse onto the center line.
 #'
 #' @return An object of class `qc_chart`, a list with elements `type`, `statistics`, `center`,
 #'   `limits` (`lcl`, `ucl`), `sigma`, `n` (subgroup size), `m` (number of subgroups), `k`,
-#'   `run_length`, and `signals` (indices of points beyond the limits, `beyond`, and in a
-#'   run, `run`).
+#'   `run_length` (`Inf` when runs are not checked), and `signals` (indices of points beyond the
+#'   limits, `beyond`, and in a run, `run`; the latter is empty unless `run_length` is set).
 #' @examples
 #' # A matrix with one row per sample
 #' set.seed(1)
@@ -50,18 +51,22 @@
 #' # A data frame with one row per bottle
 #' qc_chart(filler, type = "r", value = fill_ml, sample = cycle)
 #'
+#' # Also flag runs of 7 or more points on one side of the center line (off by default)
+#' qc_chart(x, type = "xbar", run_length = 7)
+#'
 #' # Phase II: monitor new data with limits fixed from Phase I
 #' phase1 <- qc_chart(x, type = "xbar")
 #' new <- matrix(rnorm(5 * 4, mean = 501, sd = 1), ncol = 4)
 #' qc_chart(new, type = "xbar", center = phase1$center, sigma = phase1$sigma)
 #' @export
 qc_chart <- function(data, type = c("xbar", "R"), value = NULL, sample = NULL,
-                     center = NULL, sigma = NULL, k = 3, run_length = 7) {
+                     center = NULL, sigma = NULL, k = 3, run_length = NULL) {
   type <- match.arg(tolower(type[1]), c("xbar", "r"))
   value <- rlang::enquo(value)
   sample <- rlang::enquo(sample)
   check_number(k, "k", positive = TRUE)
   check_run_length(run_length)
+  if (is.null(run_length)) run_length <- Inf   # no run signal
   if (!is.null(sigma)) check_number(sigma, "sigma", positive = TRUE)
   if (!is.null(center)) check_number(center, "center", positive = (type == "r"))
   x <- subgroup_matrix(data, value, sample)
@@ -110,11 +115,12 @@ check_number <- function(x, name, positive = FALSE) {
   invisible(x)
 }
 
-# `run_length` must be a whole number of at least 2, or Inf (no run signal).
+# `run_length` must be NULL or Inf (no run signal), or a whole number of at least 2.
 check_run_length <- function(x) {
-  ok <- is.numeric(x) && length(x) == 1 && !is.na(x) && x >= 2 && (is.infinite(x) || x == round(x))
+  ok <- is.null(x) ||
+    (is.numeric(x) && length(x) == 1 && !is.na(x) && x >= 2 && (is.infinite(x) || x == round(x)))
   if (!ok) {
-    stop("`run_length` must be a whole number of at least 2 (or `Inf` to turn the run signal off).",
+    stop("`run_length` must be a whole number of at least 2 (or `NULL` to not look for runs).",
          call. = FALSE)
   }
   invisible(x)
@@ -162,8 +168,11 @@ print.qc_chart <- function(x, digits = 3, ...) {
   cat("  limits (LCL, UCL): ", format(round(x$limits[["lcl"]], digits), nsmall = digits), ", ",
       format(round(x$limits[["ucl"]], digits), nsmall = digits), "\n", sep = "")
   cat("  sigma-hat:        ", format(round(x$sigma, digits), nsmall = digits), "\n", sep = "")
-  cat("  signals:          ", length(x$signals$beyond), " beyond the limits; ",
-      length(x$signals$run), " in runs of ", x$run_length, "+\n", sep = "")
+  cat("  signals:          ", length(x$signals$beyond), " beyond the limits", sep = "")
+  if (is.finite(x$run_length)) {
+    cat("; ", length(x$signals$run), " in runs of ", x$run_length, "+", sep = "")
+  }
+  cat("\n")
   invisible(x)
 }
 
