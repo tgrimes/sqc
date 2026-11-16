@@ -1,14 +1,29 @@
 Package: sqc
 Title: Companion Tools for a Statistical Quality Control Course
-Version: 0.4.0
+Version: 0.13.1
 Authors@R: person("Tyler", "Grimes", email = "tyler.grimes.unf@gmail.com", role = c("aut", "cre"))
 Description: Control chart constants (d2, d3, c4, A2, D3, D4, and others),
     Shewhart X-bar and R charts and Levey-Jennings charts with the Westgard
     rules drawn with ggplot2, a run-length simulator for the average run
     length of control rules, single sampling plans for acceptance sampling
     (OC curves, producer's and consumer's risk, average outgoing quality,
-    and a plan search), and the example datasets used in the lecture slides
-    and notes.
+    and a plan search), ANOVA estimators of the variance components of a
+    one-way random effects model and Gage R&R for a crossed two-factor study
+    (with simulators), process capability indices with confidence intervals and
+    a sampling distribution simulator, CUSUM and EWMA charts for small shifts
+    with their average run lengths (integral equations and simulation),
+    likelihood-ratio CUSUMs for counts and for risk-adjusted outcomes, p, np, c,
+    and u charts with normal or exact probability limits, funnel plots for
+    comparing institutions (with overdispersion adjustments) and their
+    simulation, a Pareto chart, autocorrelation (ACF) plots, AR(1) simulation and
+    residual charts for dependent data, Hotelling's T-squared charts for
+    correlated variables (with the control ellipse, a comparison of the box of
+    separate charts with the ellipse, and a simulation of the limits when the
+    covariance is estimated), randomized plans and the simulation of blocking, randomization, and
+    pseudoreplication, two-level factorial designs and fractions with their
+    effects, alias structure, power, and a comparison with one factor at a time,
+    cause-and-effect diagrams, and the example datasets used in the lecture
+    slides and notes.
 License: MIT + file LICENSE
 URL: https://github.com/tgrimes/sqc
 BugReports: https://github.com/tgrimes/sqc/issues
@@ -27,4 +42,4 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 LazyData: true
-Config/roxygen2/version: 8.1.0
+Config/roxygen2/version: 8.1.1

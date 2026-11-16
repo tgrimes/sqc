@@ -19,7 +19,7 @@ Simulated; see \code{data-raw/make-data.R} (seed 6).
 filler
 }
 \description{
-Simulated fills from a four-head filler, used throughout Week 1 (rational subgrouping).
+Simulated fills from a four-head filler, used throughout Topic 1 (rational subgrouping).
 Target is 500 mL and the bottle-to-bottle SD within a head is 1 mL. Head 3 runs 3 mL high
 (an assignable cause); the other heads are centered on 500 mL.
 }

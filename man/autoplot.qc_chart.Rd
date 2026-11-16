@@ -8,7 +8,7 @@
   object,
   title = NULL,
   subtitle = NULL,
-  xlab = "Sample number (time order)",
+  xlab = NULL,
   ylab = NULL,
   digits = 2,
   ...
@@ -20,7 +20,7 @@
 \item{title, subtitle}{Plot title and subtitle (character strings or plotmath expressions).
 The default title names the chart.}
 
-\item{xlab, ylab}{Axis labels.}
+\item{xlab, ylab}{Axis labels. The defaults depend on the chart.}
 
 \item{digits}{Number of decimals in the UCL, CL, and LCL labels.}
 

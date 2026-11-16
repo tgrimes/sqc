@@ -1,0 +1,76 @@
+test_that("the p chart has limits that vary with the sample size", {
+  x <- c(5, 7, 3, 9, 4, 12, 6); n <- c(100, 120, 80, 150, 90, 110, 100)
+  cc <- count_chart(x, n, type = "p")
+  pbar <- sum(x) / sum(n)
+  expect_equal(cc$center, pbar)
+  expect_equal(cc$statistics$value, x / n)
+  expect_equal(cc$statistics$ucl, pbar + 3 * sqrt(pbar * (1 - pbar) / n))
+  expect_equal(cc$statistics$lcl, pmax(0, pbar - 3 * sqrt(pbar * (1 - pbar) / n)))
+  expect_gt(cc$statistics$ucl[3], cc$statistics$ucl[4])                         # smaller n, wider limits
+  expect_false(any(cc$statistics$signal))
+  expect_output(print(cc), "p chart")
+})
+
+test_that("the np, c, and u charts follow their formulas", {
+  x <- c(4, 6, 2, 8, 5, 3, 9, 4)
+  np <- count_chart(x, 50, type = "np"); pb <- sum(x) / (8 * 50)
+  expect_equal(np$statistics$ucl, rep(50 * pb + 3 * sqrt(50 * pb * (1 - pb)), 8))
+  expect_equal(np$statistics$center, rep(50 * pb, 8))
+  c1 <- count_chart(x, type = "c"); cb <- mean(x)
+  expect_equal(c1$statistics$ucl[1], cb + 3 * sqrt(cb)); expect_equal(c1$statistics$lcl[1], max(0, cb - 3 * sqrt(cb)))
+  e <- c(1.2, 0.8, 1.5, 1.1, 0.9, 1.4, 1.0, 1.3)
+  u <- count_chart(x, e, type = "u"); ub <- sum(x) / sum(e)
+  expect_equal(u$center, ub)
+  expect_equal(u$statistics$ucl, ub + 3 * sqrt(ub / e))
+  expect_equal(u$statistics$value, x / e)
+  expect_error(count_chart(x, c(1, 2), type = "u"))
+  expect_error(count_chart(x, type = "u"))
+  expect_error(count_chart(x, c(rep(50, 7), 60), type = "np"))
+  expect_error(count_chart(c(1, 60), 50, type = "p"))
+})
+
+test_that("the exact limits are probability limits with tail probabilities of at most 0.00135", {
+  x <- c(1, 0, 2, 1, 3, 1, 12, 0, 1, 2); n <- c(0.6, 0.9, 1.2, 0.8, 1.5, 1.0, 1.1, 0.5, 0.7, 1.3)
+  ex <- count_chart(x, n, type = "u", limits = "exact"); ub <- sum(x) / sum(n); a <- pnorm(-3)
+  hi <- qpois(1 - a, n * ub)
+  expect_equal(ex$statistics$ucl, hi / n)
+  expect_true(all(ppois(hi, n * ub, lower.tail = FALSE) <= a))
+  expect_equal(ex$signals$index, 7)
+  # with a small expected count the normal limit has a much larger false alarm probability than 0.00135
+  mu <- 0.5; ucl <- mu + 3 * sqrt(mu)
+  expect_gt(ppois(ucl, mu, lower.tail = FALSE), 0.01)
+  b <- count_chart(c(3, 5, 4, 6, 5, 7), 100, type = "p", limits = "exact")
+  expect_true(all(pbinom(qbinom(1 - a, 100, b$center), 100, b$center, lower.tail = FALSE) <= a))
+})
+
+test_that("the Laney adjustment multiplies the limits by the estimated standard deviation of the z-scores", {
+  set.seed(4)
+  n <- sample(500:1500, 20, replace = TRUE); p <- plogis(rnorm(20, -2, 0.25)); x <- rbinom(20, n, p)
+  plain <- count_chart(x, n, "p"); lan <- count_chart(x, n, "p", adjust = "laney")
+  z <- (x - n * plain$center) / sqrt(n * plain$center * (1 - plain$center))
+  sz <- mean(abs(diff(z))) / 1.128
+  expect_equal(lan$sigma_z, sz)
+  expect_equal(lan$statistics$ucl - lan$statistics$center, sz * (plain$statistics$ucl - plain$statistics$center))
+  expect_gt(sz, 1)
+  expect_gte(nrow(plain$signals), nrow(lan$signals))
+  expect_error(count_chart(x, n, "p", adjust = "laney", limits = "exact"))
+})
+
+test_that("a known center is used for a Phase II chart", {
+  cc <- count_chart(c(2, 1, 3, 2, 8), c(1, 1, 1, 1, 1), "u", center = 2)
+  expect_equal(cc$center, 2)
+  expect_equal(cc$signals$index, 5)
+  expect_error(count_chart(c(2, 1, 3), c(1, 1, 1), "p", center = 1.2))
+  expect_error(count_chart(c(1, NA, 3), type = "c"))
+  expect_error(count_chart(c(1, 2.5, 3), type = "c"))
+})
+
+test_that("the example datasets behave as documented", {
+  hh <- count_chart(hand_hygiene$compliant, hand_hygiene$audits, "p")
+  expect_true(length(hh$signals$index) >= 2 && all(hh$signals$index >= 19))
+  expect_gt(hh$statistics$value[7], hh$statistics$lcl[7])
+  u_norm <- count_chart(clabsi_unit$infections, clabsi_unit$line_days / 1000, "u")
+  u_ex <- count_chart(clabsi_unit$infections, clabsi_unit$line_days / 1000, "u", limits = "exact")
+  expect_equal(u_norm$signals$index, c(6, 17)); expect_equal(u_ex$signals$index, 17)
+  expect_s3_class(autoplot(u_ex), "ggplot"); expect_s3_class(as.data.frame(u_ex), "data.frame")
+})

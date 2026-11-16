@@ -21,14 +21,22 @@ knitr::opts_chunk$set(
 )
 ```
 
-The `sqc` package accompanies a course in Statistical Quality Control. It has six parts:
+The `sqc` package accompanies a course in Statistical Quality Control. The course is organized in twelve topics, and the package has the tools and the example data for each:
 
-1. **Constants** for control chart limits: `d2()`, `d3()`, `c4()`, and the table `qc_constants()`.
-2. **Charts**: `qc_chart()` computes an $\bar{X}$ or $R$ chart, and `autoplot()` draws it with ggplot2.
-3. **Levey-Jennings charts and the Westgard rules** for laboratory control results: `lj_chart()` and `apply_rules()`.
-4. **Run-length simulation** for the average run length of control rules: `sim_run_length()`, `arl()`, and `arl_table()`.
-5. **Acceptance sampling**: `sampling_plan()`, `oc_curve()`, `plan_risks()`, `find_plan()`, `aoq()`, `ati()`, `aoql()`, and `sim_acceptance()`.
-6. **Example data**: `filler` and `filler_rotating`, the four-head bottle filler used in Week 1.
+1. **Rational subgrouping**: the constants `d2()`, `d3()`, `c4()`, and `qc_constants()`; `qc_chart()` for $\bar{X}$, $R$, I, and MR charts, drawn with `autoplot()`; the four-head filler data `filler` and `filler_rotating`.
+2. **Operating characteristics of control charts**: Levey-Jennings charts and the Westgard rules (`lj_chart()`, `apply_rules()`) and the run-length simulator (`sim_run_length()`, `arl()`, `arl_table()`).
+3. **Operating characteristics of sampling plans**: `sampling_plan()`, `oc_curve()`, `plan_risks()`, `find_plan()`, `aoq()`, `ati()`, `aoql()`, and `sim_acceptance()`.
+4. **Phase I estimation**: `qc_chart()` with `exclude`, `center`, and `sigma`, and `sim_run_length()` with `shift` and `scale` for limits that were estimated.
+5. **Process capability**: `capability()`, `sim_capability()`, `cpk_oc()`, `capability_plan()`, `dpmo()`, and `sigma_level()`; the data `tablet_press` and `tablet_supplier`.
+6. **Measurement systems**: `gage_rr()` (a crossed parts-by-operators study) and its simulator `sim_gage()`.
+7. **Sequential monitoring**: `cusum_chart()`, `ewma_chart()`, their average run lengths (`cusum_arl()`, `ewma_arl()`, `shewhart_arl()`, `find_cusum_h()`, `find_ewma_L()`, `sim_arl()`), and the likelihood-ratio CUSUMs `cusum_poisson()` and `cusum_risk()` with `sim_cusum_poisson()`, `sim_cusum_risk()`, and `cusum_limit()`; the data `gp_deaths` and `surgeon_cases`.
+8. **Count data**: `count_chart()`, `funnel_plot()`, `sim_funnel()`, and `pareto_chart()`; the data `hospital_infections`, `hand_hygiene`, and `clabsi_unit`.
+9. **Dependent data**: `acf_plot()`, `sim_ar1()`, `i_chart_alarm_rate()`, `sim_dependent()`, and `ar1_chart()`; the data `fridge_temp`.
+10. **Multivariate monitoring**: `hotelling_chart()`, `t2_ellipse()`, `sim_box_ellipse()`, and `sim_hotelling()`; the data `bp_home`.
+11. **DOE principles**: `doe_plan()`, `sim_blocking()`, `sim_randomization()`, `sim_pseudorep()`, and `vc_oneway()` (the one-way random effects model and the intraclass correlation, with its simulator `sim_vc()`).
+12. **Factorial designs**: `factorial_design()`, `alias_structure()`, `factorial_effects()`, `interaction_plot()`, `doe_power()`, `doe_n()`, `sim_ofat()`, and `fishbone()`; the data `helicopter` and `helicopter_confirm`.
+
+The precision study `assay_study` (an HbA1c analyzer measured by three technicians) is not used by the current topics; it is kept for the examples of `vc_oneway()` and `gage_rr()` below.
 
 ```{r}
 library(sqc)
@@ -269,6 +277,71 @@ set.seed(1)
 sim_acceptance(plan, p = c(0.01, 0.05), reps = 5000)
 ```
 
+## Variance components: the one-way random effects model
+
+When measurements come in groups (the same sample measured several times, or the results of one day), the total variance is the sum of a between-group and a within-group component, $\sigma_a^2 + \sigma_e^2$. `vc_oneway()` estimates them from the ANOVA table by the method of moments, $\hat\sigma_e^2 = MSW$ and $\hat\sigma_a^2 = (MSB - MSW)/n_0$, and reports the intraclass correlation $\sigma_a^2/(\sigma_a^2 + \sigma_e^2)$ with confidence intervals:
+
+```{r}
+vc_oneway(assay_study, value = hba1c, group = sample)
+```
+
+The estimate of $\sigma_a^2$ can be negative (when $MSB < MSW$); the table then shows the negative value and the SD, percent, and ICC use 0. `sim_vc()` simulates the estimators for a design of `a` groups with `n` observations each, to see how precise they are and how often the group component comes out negative:
+
+```{r}
+set.seed(1)
+s <- sim_vc(a = 3, n = 6, sigma_a = 0.2, sigma_e = 0.5, nsim = 5000)
+mean(s$sigma2_a < 0)       # share of negative estimates of the between-group variance
+```
+
+## Gage R&R: a crossed measurement system study
+
+When every part is measured by every operator, with replicates, the two-factor random effects model splits the variance into repeatability, operator, part-by-operator, and part-to-part components. `gage_rr()` estimates them from the ANOVA table and reports the Gage R&R summary:
+
+```{r}
+gage_rr(assay_study, value = hba1c, part = sample, operator = technician)
+```
+
+The %GRR is the gage R&R standard deviation as a percent of the total standard deviation (below 10 percent acceptable, 10 to 30 marginal, above 30 unacceptable), and the number of distinct categories is $\lfloor\sqrt2\,\sigma_P/\sigma_{GRR}\rfloor$. `sim_gage()` simulates studies of any size:
+
+```{r}
+set.seed(1)
+s <- sim_gage(p = 10, o = 3, r = 2, sigma_p = 1.4, sigma_o = 0.2, sigma_po = 0.08, sigma_e = 0.15, nsim = 2000)
+quantile(s$pct_grr, c(0.05, 0.5, 0.95))
+```
+
+## Process capability
+
+`capability()` computes the capability indices of a sample against the specification limits, with confidence intervals (the exact chi-square interval for Cp and the Bissell approximation or a bootstrap for Cpk):
+
+```{r}
+capability(tablet_supplier$weight_mg, lsl = 475, usl = 525)
+```
+
+`sim_capability()` shows how uncertain an index from a small sample is, and `dpmo()` and `sigma_level()` convert between Cpk and defects per million:
+
+```{r}
+set.seed(1)
+s <- sim_capability(30, mu = 500, sigma = 25 / (3 * 1.33), lsl = 475, usl = 525, nsim = 2000)
+mean(s$cpk >= 1.4)      # how often a process with true Cpk 1.33 shows 1.4 or more in 30 tablets
+dpmo(2, shift = 1.5)    # 3.4 defects per million: the six sigma convention
+```
+
+## Individual results: the I and MR charts
+
+For one result per time point there are no subgroups to estimate the within-subgroup variation from, so the consecutive pairs are used as subgroups of size 2. The **moving range** of result $i$ is $MR_i = |x_i - x_{i-1}|$, the standard deviation is estimated by $\hat\sigma = \overline{MR}/d_2$ with $d_2 = 1.128$, and the **I chart** has limits $\bar x \pm 3\hat\sigma$ (that is, $\bar x \pm 2.66\,\overline{MR}$). `qc_chart()` draws the I chart and the MR chart (`type = "I"` and `"MR"`):
+
+```{r}
+set.seed(3)
+y <- c(rnorm(14, mean = 100, sd = 3), 116, rnorm(15, mean = 100, sd = 3))      # result 15 has an assignable cause
+qc_chart(y, type = "I")
+```
+
+In Phase I, a result with a documented assignable cause is left out of the estimation with `exclude` (it is still plotted, as a cross), and the chart is recomputed:
+
+```{r}
+autoplot(qc_chart(y, type = "I", exclude = 15), subtitle = "Result 15 (assignable cause) left out of the estimation")
+```
+
 ## Run lengths when the limits are estimated
 
 Limits are usually estimated from a baseline, and the process has its true mean $\mu$ and SD $\sigma$ rather than the estimates $\hat\mu$ and $\hat\sigma$. The standardized results $(X - \hat\mu)/\hat\sigma$ have a **shift** $(\mu - \hat\mu)/\hat\sigma$ and a **scale** $\sigma/\hat\sigma$, which `sim_run_length()` accepts as `shift` and `scale`. For example, a baseline that estimated the SD at 80% of its true value and the mean 0.4 SD too high gives a 1-3s rule that rejects far too often:
@@ -279,6 +352,101 @@ set.seed(2)
 sim_run_length("1-3s", levels = 1, shift = -mu_hat / sigma_hat, scale = 1 / sigma_hat, reps = 2000)
 1 / (1 - pnorm(mu_hat + 3 * sigma_hat) + pnorm(mu_hat - 3 * sigma_hat))     # exact ARL
 ```
+
+## Small shifts: CUSUM and EWMA charts
+
+A Shewhart chart looks at one point at a time and is slow to find small shifts. The **CUSUM** adds up the evidence, and the **EWMA** averages over the recent past. Both are computed for results in time order with the established target and standard deviation (Phase II):
+
+```{r}
+set.seed(1)
+x <- c(rnorm(30), rnorm(30, mean = 1))          # a shift of 1 SD after observation 30
+cusum_chart(x, target = 0, sigma = 1, k = 0.5, h = 4.77)
+ewma_chart(x, target = 0, sigma = 1, lambda = 0.2, L = 2.859)
+```
+
+`autoplot()` draws them. The average run length (ARL) for any shift is computed by the integral-equation method, and the in-control ARL is matched by choosing `h` or `L`:
+
+```{r}
+find_cusum_h(370, k = 0.5)                       # decision interval for an in-control ARL of 370
+find_ewma_L(370, lambda = 0.2)
+shifts <- c(0, 0.5, 1, 2)
+data.frame(shift = shifts, shewhart = shewhart_arl(shifts), cusum = cusum_arl(shifts, k = 0.5, h = 4.77),
+           ewma = ewma_arl(shifts, lambda = 0.2, L = 2.859))
+```
+
+`sim_arl()` checks them by simulation:
+
+```{r}
+set.seed(1)
+arl(sim_arl("cusum", shift = 1, reps = 2000, k = 0.5, h = 4.77))
+```
+
+## Counts and risk-adjusted outcomes
+
+The **observed-minus-expected** CUSUM for counts (`cusum_poisson()`) adds up a log-likelihood ratio for a relative risk to detect, and the **risk-adjusted** CUSUM for 0/1 outcomes (`cusum_risk()`) does the same with the predicted risk of each patient. The signal reports when the change probably started and how many more events than expected have occurred since. The decision interval can be chosen by simulating the statistic for the series to be monitored:
+
+```{r}
+set.seed(1)
+h <- cusum_limit(sim_cusum_poisson(gp_deaths$expected, rr = 1.5, reps = 2000), alpha = 0.05)
+cusum_poisson(gp_deaths$observed, gp_deaths$expected, rr = 1.5, h = h)
+```
+
+## Counts and proportions: p, c, and u charts and funnel plots
+
+For counts the variance depends on the mean and on the sample size, so the limits of a **p chart** (nonconforming units out of $n_i$) and of a **u chart** (events per unit of exposure) vary with $n_i$. `count_chart()` computes them, with normal or exact (binomial or Poisson) limits:
+
+```{r}
+count_chart(hand_hygiene$compliant, hand_hygiene$audits, type = "p")
+count_chart(clabsi_unit$infections, clabsi_unit$line_days / 1000, type = "u", limits = "exact")
+```
+
+To compare institutions of different sizes, a **funnel plot** shows each institution's observed-to-expected ratio against its expected count, with limits that narrow as the institution grows. Ranking the ratios instead puts the small institutions at both ends:
+
+```{r}
+f <- funnel_plot(hospital_infections$observed, hospital_infections$predicted, label = hospital_infections$hospital)
+f
+autoplot(f)
+```
+
+`sim_funnel()` shows how often a funnel plot flags institutions that differ by more than chance, and `overdispersion = "multiplicative"` or `"additive"` widens the limits accordingly.
+
+## Dependent data: autocorrelation and residual charts
+
+The charts assume independent observations. When consecutive values are correlated (a refrigerator temperature logged every 15 minutes) the moving range underestimates the standard deviation and the limits of the I chart are too narrow. The ACF shows the dependence, and `ar1_chart()` charts the residuals of an AR(1) fit instead:
+
+```{r}
+acf_plot(fridge_temp$temp_c, lag_max = 30)
+ar1_chart(fridge_temp$temp_c, k = 4)
+i_chart_alarm_rate(c(0, 0.5, 0.9))       # share of points beyond the I chart limits when rho = 0, 0.5, 0.9
+```
+
+`sim_ar1()` simulates AR(1) data and `sim_dependent()` measures the false alarm rates of the charts by simulation.
+
+## Multivariate data: Hotelling's T-squared
+
+When several measurements are correlated, charting each one separately defines a *box* of acceptable values, and a reading can be inside the box and still be unusual because the variables do not move together as they usually do. `hotelling_chart()` charts the standardized distance $T^2$, whose control region is an *ellipse*. The mean and covariance are estimated from the Phase I rows (`phase1`), and the limit is the beta limit for Phase I points and the F limit for Phase II points:
+
+```{r}
+h <- hotelling_chart(bp_home, c("systolic", "diastolic"), phase1 = 1:60)
+h
+autoplot(h, which = "ellipse")
+h$contributions[h$signals, ]          # which variable is unusual given the other
+```
+
+`sim_box_ellipse()` compares the box with the ellipse by simulation, and `sim_hotelling()` shows how the chi-square limit fails when the covariance is estimated from few points.
+
+## Designed experiments
+
+`doe_plan()` randomizes the assignment of treatments (optionally within blocks), and `sim_blocking()`, `sim_randomization()`, and `sim_pseudorep()` show by simulation why blocking, randomization, and true replication matter. For a two-level factorial, `factorial_design()` makes the run sheet and `factorial_effects()` estimates the effects by contrasts:
+
+```{r}
+fe <- factorial_effects(helicopter, flight_time, c("wing", "body", "clip"))
+fe
+autoplot(fe)
+interaction_plot(helicopter, flight_time, "wing", "clip")
+```
+
+`doe_power()` and `doe_n()` give the power of an effect test, `alias_structure()` the aliases of a fraction, `sim_ofat()` compares one factor at a time with the factorial, and `fishbone()` draws a cause-and-effect diagram.
 
 ## Customizing the plot
 
@@ -309,3 +477,24 @@ autoplot(rational, subtitle = "Rational subgroup plan") +
 | Sampling plan, OC curve | `sampling_plan(n, c, N)`; `oc_curve(plan)`; `autoplot(oc, aql, ltpd)` |
 | Producer's and consumer's risk; smallest plan | `plan_risks(plan, aql, ltpd)`; `find_plan(aql, alpha, ltpd, beta)` |
 | Rectifying inspection | `aoq(plan, p)`; `ati(plan, p)`; `aoql(plan)` |
+| ANOVA variance components, ICC | `vc_oneway(df, value = y, group = g)`; `sim_vc(a, n, sigma_a, sigma_e)` |
+| Capability indices, intervals | `capability(x, lsl, usl)`; `sim_capability(n, mu, sigma, lsl, usl)`; `dpmo(cpk, shift)`; `sigma_level(dpmo)` |
+| Gage R&R, %GRR, distinct categories | `gage_rr(df, value = y, part = p, operator = o)`; `sim_gage(p, o, r, sigma_p, sigma_o, sigma_po, sigma_e)` |
+| CUSUM and EWMA charts | `cusum_chart(x, target, sigma, k, h)`; `ewma_chart(x, target, sigma, lambda, L)`; `autoplot()` |
+| Average run lengths | `cusum_arl(shift, k, h)`; `ewma_arl(shift, lambda, L)`; `shewhart_arl(shift, L)`; `sim_arl(chart, shift)` |
+| Limits for a chosen in-control ARL | `find_cusum_h(arl0, k)`; `find_ewma_L(arl0, lambda)` |
+| Observed-minus-expected and risk-adjusted CUSUM | `cusum_poisson(observed, expected, rr, h)`; `cusum_risk(outcome, risk, odds_ratio, h)` |
+| Decision interval by simulation | `sim_cusum_poisson(expected, rr)`; `sim_cusum_risk(risk, odds_ratio)`; `cusum_limit(sim, alpha)` |
+| p, np, c, u charts | `count_chart(count, n, type = "p")`; `limits = "exact"`; `adjust = "laney"`; `autoplot()` |
+| Funnel plot of institutions | `funnel_plot(observed, expected, label)`; `type = "proportion"`; `overdispersion = "additive"`; `autoplot()` |
+| Flag rates of a funnel plot by simulation | `sim_funnel(size, tau = 0.3, reps)` |
+| Pareto chart | `pareto_chart(c(A = 5, B = 20))` |
+| Autocorrelation function | `acf_plot(x, lag_max = 30)` |
+| AR(1) residual chart | `ar1_chart(x, k = 3)`; `autoplot(a, which = "data")`; known parameters: `ar1_chart(x, phi, mean, sigma_e)` |
+| Simulate AR(1) data; false alarm rates | `sim_ar1(n, phi, sigma)`; `sim_dependent(phi, n, reps)`; `i_chart_alarm_rate(rho)` |
+| Hotelling's T-squared chart | `hotelling_chart(data, vars, phase1)`; `autoplot(h, which = "ellipse")`; known parameters: `hotelling_chart(data, mean =, cov =)` |
+| Box against ellipse; estimated-covariance limits | `sim_box_ellipse(rho, shift, rho_true)`; `sim_hotelling(m, p, reps)`; `t2_ellipse(mean, cov)` |
+| Randomized plan; blocking, randomization, pseudoreplication by simulation | `doe_plan(treatments, blocks, seed)`; `sim_blocking()`; `sim_randomization()`; `sim_pseudorep()` |
+| Two-level factorial: design, effects, plots | `factorial_design(factors, replicates, generators)`; `factorial_effects(data, y, factors)`; `autoplot(fe)`; `interaction_plot()`; `predict(fe, newdata)` |
+| Fractions, power, and one factor at a time | `alias_structure(factors, generators)`; `doe_power(delta, sigma, N)`; `doe_n()`; `sim_ofat(b1, b2, b12, sigma)` |
+| Cause-and-effect diagram | `fishbone(effect, list(Category = c("cause", ...)))` |

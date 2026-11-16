@@ -136,7 +136,7 @@ check_whole <- function(x, name, minimum) {
 #' @seealso [sim_run_length()], [arl_table()]
 #' @export
 arl <- function(x) {
-  if (!inherits(x, "sqc_run_lengths")) stop("`x` must come from sim_run_length().", call. = FALSE)
+  if (!inherits(x, c("sqc_run_lengths", "sqc_chart_run_lengths"))) stop("`x` must come from sim_run_length() or sim_arl().", call. = FALSE)
   mean(unclass(x))
 }
 

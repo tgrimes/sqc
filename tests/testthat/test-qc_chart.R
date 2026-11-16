@@ -180,3 +180,98 @@ test_that("plot() draws the chart and returns the object invisibly", {
   expect_invisible(res <- plot(q, title = "Plot method"))
   expect_identical(res, q)
 })
+
+# Individual results: the I and MR charts
+y <- c(10, 12, 11, 14, 13, 9, 12, 15)
+mr_y <- abs(diff(y))                      # 2 1 3 1 4 3 3
+mrbar <- mean(mr_y)
+
+test_that("the I chart matches the hand calculation", {
+  q <- qc_chart(y, type = "I")
+  sigma_hat <- mrbar / d2(2)
+  expect_equal(q$center, mean(y))
+  expect_equal(q$sigma, sigma_hat)
+  expect_equal(unname(q$limits), mean(y) + c(-1, 1) * 3 * sigma_hat)
+  expect_equal(unname(q$limits), mean(y) + c(-1, 1) * 3 / d2(2) * mrbar)        # about 2.66 MRbar
+  expect_equal(q$statistics, y)
+  expect_equal(c(q$m, q$n), c(8, 1))
+  expect_equal(q$index, 1:8)
+})
+
+test_that("the MR chart matches the hand calculation", {
+  q <- qc_chart(y, type = "MR")
+  cons <- qc_constants(2)
+  expect_equal(q$statistics, mr_y)
+  expect_equal(q$index, 2:8)
+  expect_equal(q$center, mrbar)
+  expect_equal(q$sigma, mrbar / d2(2))
+  expect_equal(unname(q$limits), c(cons$D3 * mrbar, cons$D4 * mrbar))
+  expect_equal(q$n, 2)
+})
+
+test_that("signals are reported as observation numbers", {
+  z <- c(rep(c(50, 51), 8), 62, rep(c(50, 51), 3))              # observation 17 is far from the rest
+  qi <- qc_chart(z, type = "I", exclude = 17)
+  expect_equal(qi$signals$beyond, 17)
+  qm <- qc_chart(z, type = "MR", exclude = 17)
+  expect_equal(qm$signals$beyond, c(17, 18))                       # the moving ranges into and out of observation 17
+  expect_equal(as.data.frame(qm)$status[qm$index == 17], "Beyond limits")
+})
+
+test_that("exclude leaves points out of the estimation but still plots them", {
+  q <- qc_chart(y, type = "I", exclude = 6)
+  keep_mean <- mean(y[-6])
+  pairs_in_use <- c(abs(y[2] - y[1]), abs(y[3] - y[2]), abs(y[4] - y[3]), abs(y[5] - y[4]), abs(y[8] - y[7]))
+  expect_equal(q$center, keep_mean)
+  expect_equal(q$sigma, mean(pairs_in_use) / d2(2))            # the two moving ranges involving point 6 are dropped
+  expect_equal(q$statistics, y)
+  expect_equal(q$exclude, 6L)
+  expect_true(as.data.frame(q)$excluded[6])
+  expect_output(print(q), "left out of the estimation: 6")
+  # subgroup charts
+  qx <- qc_chart(x, type = "xbar", exclude = 1)
+  expect_equal(qx$center, mean(rowMeans(x)[-1]))
+  expect_equal(qx$sigma, mean(c(2, 3, 2)) / d2(4))
+  expect_equal(qc_chart(x, type = "R", exclude = 4)$center, mean(c(3, 2, 3)))
+})
+
+test_that("known center and sigma are used for the I and MR charts", {
+  q <- qc_chart(y, type = "I", center = 12, sigma = 2)
+  expect_equal(unname(q$limits), 12 + c(-1, 1) * 6)
+  m <- qc_chart(y, type = "MR", sigma = 2)
+  expect_equal(m$center, 2 * d2(2))
+  expect_equal(m$limits[["ucl"]], 2 * d2(2) + 3 * d3(2) * 2)
+  expect_equal(qc_chart(y, type = "MR", center = 3)$sigma, 3 / d2(2))
+})
+
+test_that("a data frame gives the same I chart as the vector", {
+  df <- data.frame(v = y, t = seq_along(y))
+  expect_equal(qc_chart(df, type = "i", value = v)$limits, qc_chart(y, type = "I")$limits)
+})
+
+test_that("the I and MR charts and exclude are validated", {
+  expect_error(qc_chart(matrix(1:8, 4), type = "I"), "numeric vector or a data frame")
+  expect_error(qc_chart(y, type = "I", sample = t), "not used")
+  expect_error(qc_chart(c(1, 2), type = "I"), "at least 3")
+  expect_error(qc_chart(c(1, NA, 3, 4), type = "MR"), "no missing values")
+  expect_error(qc_chart(y, type = "I", exclude = 9), "between 1 and 8")
+  expect_error(qc_chart(y, type = "I", exclude = 0), "between 1 and 8")
+  expect_error(qc_chart(y, type = "I", exclude = c(1, 2, 3, 4, 5, 6)), "Too few")
+  expect_error(qc_chart(x, type = "xbar", exclude = 1:4), "Too few")
+  expect_warning(qc_chart(rep(5, 6), type = "I"), "estimated sigma is 0")
+})
+
+test_that("the I and MR charts can be drawn and printed", {
+  expect_s3_class(ggplot2::autoplot(qc_chart(y, type = "I")), "ggplot")
+  expect_s3_class(ggplot2::autoplot(qc_chart(y, type = "MR", exclude = 6)), "ggplot")
+  expect_output(print(qc_chart(y, type = "I")), "I chart: 8 individual results")
+  expect_output(print(qc_chart(y, type = "MR")), "MR chart")
+})
+
+test_that("the I chart false alarm rate is about 0.0027 on in-control normal data", {
+  set.seed(5)
+  z <- rnorm(5000)
+  q <- qc_chart(z, type = "I")
+  expect_lt(abs(length(q$signals$beyond) / 5000 - 0.0027), 0.0015)
+  expect_equal(q$sigma, 1, tolerance = 0.05)
+})

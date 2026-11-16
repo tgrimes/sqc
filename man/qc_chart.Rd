@@ -6,25 +6,28 @@
 \usage{
 qc_chart(
   data,
-  type = c("xbar", "R"),
+  type = c("xbar", "R", "I", "MR"),
   value = NULL,
   sample = NULL,
   center = NULL,
   sigma = NULL,
   k = 3,
-  run_length = NULL
+  run_length = NULL,
+  exclude = NULL
 )
 }
 \arguments{
 \item{data}{Subgroup data, either a matrix with one row per subgroup (sample) and one column
 per observation, or a data frame with one row per observation (use \code{value} and \code{sample}).
 All subgroups must have the same size \eqn{n \ge 2}{n >= 2}. Subgroups are plotted in the order
-in which they first appear.}
+in which they first appear. For \code{type = "I"} or \code{"MR"}, a numeric vector of individual results
+in time order, or a data frame with the results in the column \code{value}.}
 
-\item{type}{\code{"xbar"} for the \eqn{\bar X}{Xbar} chart or \code{"R"} for the \eqn{R} chart (case is ignored).}
+\item{type}{\code{"xbar"} for the \eqn{\bar X}{Xbar} chart, \code{"R"} for the \eqn{R} chart, \code{"I"} for the
+individuals chart, or \code{"MR"} for the moving range chart (case is ignored).}
 
 \item{value, sample}{For a data frame: the column holding the measurements and the column
-identifying the subgroup (bare names, as in dplyr).}
+identifying the subgroup (bare names, as in dplyr). The I and MR charts use \code{value} only.}
 
 \item{center, sigma}{Optional known (or target) center line and within-subgroup standard
 deviation \eqn{\sigma}{sigma}. Supplying them gives limits that are not re-estimated, which is
@@ -35,16 +38,24 @@ number. Default 3.}
 
 \item{run_length}{Length of a one-sided run that counts as a signal: a whole number of at
 least 2. The default, \code{NULL}, does not look for runs (\code{Inf} has the same effect).}
+
+\item{exclude}{Positions (subgroup numbers, or the observation numbers for I and MR charts) to
+leave out of the estimation of the center line and \eqn{\sigma}{sigma}, for example runs with a known
+assignable cause. Default \code{NULL}.}
 }
 \value{
-An object of class \code{qc_chart}, a list with elements \code{type}, \code{statistics}, \code{center},
-\code{limits} (\code{lcl}, \code{ucl}), \code{sigma}, \code{n} (subgroup size), \code{m} (number of subgroups), \code{k},
-\code{run_length} (\code{Inf} when runs are not checked), and \code{signals} (indices of points beyond the
-limits, \code{beyond}, and in a run, \code{run}; the latter is empty unless \code{run_length} is set).
+An object of class \code{qc_chart}, a list with elements \code{type}, \code{statistics}, \code{index} (the
+observation or subgroup number of each plotted statistic: \code{1:m}, or \code{2:m} for the MR chart),
+\code{center}, \code{limits} (\code{lcl}, \code{ucl}), \code{sigma}, \code{n} (subgroup size, 1 for the I chart and 2 for the
+MR chart), \code{m} (number of subgroups, or of individual results), \code{k}, \code{run_length} (\code{Inf} when
+runs are not checked), \code{exclude}, and \code{signals} (positions of points beyond the limits,
+\code{beyond}, and in a run, \code{run}, as subgroup or observation numbers; the latter is empty unless
+\code{run_length} is set).
 }
 \description{
 Computes the plotted statistics, center line, control limits, and signals for an
-\eqn{\bar X}{Xbar} or \eqn{R} chart from subgroup data. Draw the chart with \code{\link[=autoplot.qc_chart]{autoplot.qc_chart()}}.
+\eqn{\bar X}{Xbar} or \eqn{R} chart from subgroup data, or for an individuals (I) or moving range
+(MR) chart from individual results. Draw the chart with \code{\link[=autoplot.qc_chart]{autoplot.qc_chart()}}.
 }
 \details{
 The center line and limits are estimated from the data unless \code{center} or \code{sigma} are given.
@@ -57,18 +68,35 @@ With subgroup size \eqn{n}, the within-subgroup standard deviation is estimated 
 \eqn{\max(0, \bar R - k d_3\hat\sigma)}{max(0, Rbar - k d_3*sigma-hat)} and \eqn{\bar R + k d_3\hat\sigma}{Rbar + k d_3*sigma-hat}.
 }
 
+For \strong{individual results} (one observation per time point) the "subgroups" are consecutive
+pairs. The moving range of the \eqn{i}th result is \eqn{MR_i = |x_i - x_{i-1}|}{MR_i = |x_i - x_(i-1)|},
+\eqn{\hat\sigma = \overline{MR} / d_2}{sigma-hat = MRbar / d_2} with \eqn{d_2 = 1.128} (the value for
+\eqn{n = 2}), and
+\itemize{
+\item the I chart plots the results with center line \eqn{\bar x}{xbar} (or \code{center}) and limits
+\eqn{\text{CL} \pm k\hat\sigma}{CL +/- k*sigma-hat} (for \eqn{k = 3}, \eqn{\bar x \pm 2.66\,\overline{MR}}{xbar +/- 2.66 MRbar});
+\item the MR chart plots the moving ranges (starting at the second result) with the R chart limits for
+\eqn{n = 2} (for \eqn{k = 3}, \eqn{0} and \eqn{3.267\,\overline{MR}}{3.267 MRbar}).
+}
+
 A point beyond the limits is always flagged as a signal. Patterns within the limits are not
 checked unless you ask for them: set \code{run_length} to flag a run of that many (or more)
 consecutive points on one side of the center line. The points from the \code{run_length}th onward
 are flagged, since that is when the run is recognized.
+
+In Phase I, subgroups or results with an assignable cause are left out of the estimation with
+\code{exclude}. They are still plotted (and flagged if they lie beyond the limits), but they do not
+contribute to the center line or to \eqn{\hat\sigma}{sigma-hat}. For individual results a moving range is
+left out when either of its two results is excluded.
 }
 \section{Errors and warnings}{
 
 Invalid arguments give an error: \code{k} must be a positive number, \code{sigma} a positive finite
-number, \code{center} a finite number (positive for an \eqn{R} chart), and \code{run_length} \code{NULL}, \code{Inf},
-or a whole number of at least 2. Subgroups must all have the same size, at least 2, with no
-missing values. A warning is given if the estimated \eqn{\sigma}{sigma} is 0 (every subgroup
-has range 0), because the limits then collapse onto the center line.
+number, \code{center} a finite number (positive for an \eqn{R} or MR chart), \code{run_length} \code{NULL}, \code{Inf},
+or a whole number of at least 2, and \code{exclude} whole numbers between 1 and the number of
+subgroups (or results), leaving enough to estimate from. Subgroups must all have the same size, at
+least 2, with no missing values. A warning is given if the estimated \eqn{\sigma}{sigma} is 0
+(every subgroup has range 0), because the limits then collapse onto the center line.
 }
 
 \examples{
@@ -88,4 +116,12 @@ qc_chart(x, type = "xbar", run_length = 7)
 phase1 <- qc_chart(x, type = "xbar")
 new <- matrix(rnorm(5 * 4, mean = 501, sd = 1), ncol = 4)
 qc_chart(new, type = "xbar", center = phase1$center, sigma = phase1$sigma)
+
+# Individual results: the I and MR charts, with sigma estimated from the moving ranges
+y <- c(rnorm(15, mean = 100, sd = 3), 118, rnorm(14, mean = 100, sd = 3))
+qc_chart(y, type = "I")
+qc_chart(y, type = "MR")
+
+# Leave a run with a known assignable cause (run 16) out of the estimation
+qc_chart(y, type = "I", exclude = 16)
 }

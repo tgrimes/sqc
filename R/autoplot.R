@@ -7,7 +7,7 @@
 #' @param object A [qc_chart()] object.
 #' @param title,subtitle Plot title and subtitle (character strings or plotmath expressions).
 #'   The default title names the chart.
-#' @param xlab,ylab Axis labels.
+#' @param xlab,ylab Axis labels. The defaults depend on the chart.
 #' @param digits Number of decimals in the UCL, CL, and LCL labels.
 #' @param ... Not used.
 #' @return A ggplot object, so it can be modified with the usual `+` syntax.
@@ -16,11 +16,16 @@
 #' autoplot(q, subtitle = "Four-head filler, one bottle from each head")
 #' @export
 autoplot.qc_chart <- function(object, title = NULL, subtitle = NULL,
-                              xlab = "Sample number (time order)", ylab = NULL, digits = 2, ...) {
+                              xlab = NULL, ylab = NULL, digits = 2, ...) {
   if (is.null(title)) {
-    title <- if (object$type == "xbar") expression(bar(X) * " chart") else "R chart"
+    title <- switch(object$type, xbar = expression(bar(X) * " chart"), r = "R chart", i = "I chart", mr = "MR chart")
   }
-  if (is.null(ylab)) ylab <- if (object$type == "xbar") "Sample mean" else "Sample range"
+  if (is.null(ylab)) {
+    ylab <- switch(object$type, xbar = "Sample mean", r = "Sample range", i = "Individual result", mr = "Moving range")
+  }
+  if (is.null(xlab)) {
+    xlab <- if (object$type %in% c("i", "mr")) "Observation (time order)" else "Sample number (time order)"
+  }
   has_runs <- is.finite(object$run_length)
   run_label <- paste0("Run of ", object$run_length, " on one side")
   d <- as.data.frame(object)
@@ -41,7 +46,8 @@ autoplot.qc_chart <- function(object, title = NULL, subtitle = NULL,
     ggplot2::geom_hline(yintercept = object$center) +
     ggplot2::geom_hline(yintercept = lims, linetype = "dashed") +
     ggplot2::geom_line(color = "grey60") +
-    ggplot2::geom_point(ggplot2::aes(color = .data$status), size = 2.2) +
+    ggplot2::geom_point(ggplot2::aes(color = .data$status, shape = .data$excluded), size = 2.2) +
+    ggplot2::scale_shape_manual(values = c(`FALSE` = 16, `TRUE` = 4), guide = "none") +
     ggplot2::geom_text(data = edge, ggplot2::aes(x = m + 0.7, y = .data$y, label = .data$label),
                        hjust = 0, size = 3.6, inherit.aes = FALSE) +
     ggplot2::scale_color_manual(values = colors, breaks = c("Beyond limits", if (has_runs) run_label), name = NULL) +
